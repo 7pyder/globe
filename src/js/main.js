@@ -1,164 +1,78 @@
-var scene, camera, renderer;
-var vrControls, vrEffect, vrDisplay, rayInput, skybox, elem;
-var loader = new THREE.TextureLoader(),
-nodeGroup = new THREE.Object3D(),
-currentNode = new THREE.Object3D();
+import 'webvr-polyfill'
+const THREE = require('three')
 
-// vrDisplay = controls.getVRDisplay()
-if (navigator.getVRDisplays) {
-	navigator.getVRDisplays().then(function (displays){
-		if ( displays.length > 0 ) {
-			vrDisplay = displays[0];
-		} else {
-			console.warn( 'VR Display not found' )
-		}
-	}).catch(function (){
-		console.warn( 'THREE.VRControls: Unable to get VR Displays' )
-	});
-} else {
-	console.warn('WebVR API not available')
-}
+var scene, camera, renderer, globe
+var win = window
 
-var container = document.getElementById('container')
-init(container)
+var loader = new THREE.TextureLoader()
+var scene = new THREE.Scene()
+var camera = new THREE.PerspectiveCamera( 75, win.innerWidth / win.innerHeight, 0.1, 1000 )
+camera.position.z = 200
 
-function init(container) {
-	elem = container || window
+var renderer = new THREE.WebGLRenderer()
+renderer.setSize( win.innerWidth, win.innerHeight )
+document.body.appendChild( renderer.domElement )
 
-	scene = new THREE.Scene();
-	camera = new THREE.PerspectiveCamera(75, elem.clientWidth / elem.clientHeight, 0.1, 1000);
-	scene.add(camera);
-	
-	// Apply VR headset positional data to camera.
-	vrControls = new THREE.VRControls(camera)
-	vrControls.standing = true
-	camera.position.y = vrControls.userHeight
-
-	renderer = new THREE.WebGLRenderer({antialias: false});
-	renderer.setPixelRatio(Math.floor(window.devicePixelRatio));
-	renderer.setSize(elem.clientWidth, elem.clientHeight);
-	elem.appendChild(renderer.domElement);
-
-	// Apply VR stereo rendering to renderer.
-	vrEffect = new THREE.VREffect(renderer);
-	vrEffect.setSize(elem.clientWidth, elem.clientHeight);
-
-	// Initialize RayInput
-	rayInput = new RayInput.default(camera, renderer.domElement)
-	rayInput.setSize(renderer.getSize())
-	scene.add(rayInput.getMesh())	
-	renderObjects();
-	animate();
-	addEventHandlers();
-}
-
-loader.load('assets/img/01.jpg', onTextureLoaded);
-function onTextureLoaded(texture) {
-	var geometry = new THREE.SphereGeometry(800, 32, 32);
-	geometry.scale(-1, 1, 1);
-	var material = new THREE.MeshBasicMaterial({ map: texture });
-	skybox = new THREE.Mesh(geometry, material);
-	scene.add(skybox);
-}
-
-function renderObjects() {
-	fetch('assets/nodes.json').then(function(response) {
-		return response.json();
-	}).then(function(response) {
-		scene.add(nodeGroup);
-		var geometry, material, cube;
-		response.nodes.forEach(function(node, index) {
-			var group = new THREE.Object3D();
-			group.name = node.name;
-			node.markers.forEach(function(marker) {
-				geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-				material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-				cube = new THREE.Mesh(geometry, material);
-				geometry.translate(10 * marker.loc.x, 10 * marker.loc.y, 10 * marker.loc.z);
-				cube.link = marker.link;
-				group.add(cube);
-				if(index === 0) {
-					rayInput.add(cube);
-				}
-			});
-			nodeGroup.add(group);
-			if(index === 0) {
-				currentNode = group;
-			}
-			else {
-				group.visible = false;
-			}
-		});
-	});
-}
+loader.load('assets/img/earth.jpg', function (texture) {
+	var geometry = new THREE.SphereGeometry(100, 32, 32)
+	var material = new THREE.MeshBasicMaterial({ map: texture })
+	globe = new THREE.Mesh(geometry, material)
+	scene.add(globe)
+	animate()
+	addEvents()
+})
 
 function animate() {
-	vrControls.update();
-	rayInput.update();
-	vrEffect.render(scene, camera);
-	;(vrDisplay?vrDisplay: window).requestAnimationFrame(animate);
+	renderer.render(scene, camera)
+	requestAnimationFrame(animate)
 }
 
-function addEventHandlers() {
-	rayInput.on('rayover', function (obj) {
-		obj.material.color.setHex( 0x0000ff )
-	});
-	rayInput.on('rayout', function (obj) {
-		obj.material.color.setHex( 0x00ff00 )
-	});
-	rayInput.on('raydown', function (obj) {
-		if (obj && obj.link) {
-			obj.material.color.setHex( 0x00ff00 )
-			updateCanvas(obj.link)
-		}
-	});
+var lastMove = [window.innerWidth/2, window.innerHeight/2]
 
-	function onResize() {
-		var width, height
-		setTimeout(function() {
-			if (screenfull.isFullscreen) {
-				width = window.innerWidth
-				height = window.innerHeight
-			} else {
-				width = elem.clientWidth
-				height = elem.clientHeight
-			}
-			renderer.setSize(width, height)
-			vrEffect.setSize(width, height)
-			rayInput.setSize(renderer.getSize())
-			camera.aspect = width / height
-			camera.updateProjectionMatrix()
-		}, 10);
+function rotateOnKeydown(e) {
+	switch (e.keyCode) {
+		case 38:
+			globe.rotation.x -= 0.05
+			break
+		case 40:
+			globe.rotation.x += 0.05
+			break
+		case 37:
+			globe.rotation.y -= 0.05
+			break
+		case 39:
+			globe.rotation.y += 0.05
+			break
+		default:
+			break
 	}
-
-	window.addEventListener('resize', onResize);
-	window.addEventListener('vrdisplaypresentchange', onResize);
-	document.getElementById('vr').addEventListener('click', function() {
-		vrDisplay.requestPresent([{source: renderer.domElement}]);
-	});
-	document.getElementById('fullscreen').addEventListener('click', function() {
-		screenfull.request(container);
-	});
 }
 
-function updateCanvas(src) {
-	if (currentNode) {
-		currentNode.visible = false
-		currentNode.children.forEach(mesh => {
-			rayInput.remove(mesh)
-		})
-	}
-	loader.load('assets/img/' + src, function (texture) {
-		skybox.material.map = texture
-		skybox.material.map.needsUpdate = true
-		vrDisplay.resetPose();
-		
-		currentNode = scene.getObjectByName(src)
-		if (currentNode) {
-			currentNode.visible = true
-			currentNode.children.forEach(mesh => {
-				rayInput.add(mesh)
-			})
-		}
-	})
+function rotateOnMouseMove(e) {
+	const moveX = (e.clientX - lastMove[0])
+	const moveY = (e.clientY - lastMove[1])
+
+	globe.rotation.y += (moveX * .005)
+	globe.rotation.x += (moveY * .005)
+
+	lastMove[0] = e.clientX
+	lastMove[1] = e.clientY
+}
+
+function onMouseover(e) {
+	lastMove[0] = e.clientX
+	lastMove[1] = e.clientY
+}
+
+function onResize() {
+	renderer.setSize( win.innerWidth, win.innerHeight )
+	camera.aspect = win.innerWidth / win.innerHeight
+	camera.updateProjectionMatrix()
+}
+
+function addEvents() {
+	win.addEventListener('keydown', rotateOnKeydown)
+	win.addEventListener('mousemove', rotateOnMouseMove)
+	win.addEventListener('mouseover', onMouseover)
+	win.addEventListener('resize', onResize)
 }
