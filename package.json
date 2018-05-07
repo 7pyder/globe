@@ -1,8 +1,8 @@
 {
 	"version": "1.0.0",
 	"scripts": {
-		"dev": "webpack-dev-server",
-		"build": "webpack"
+		"dev": "NODE_ENV=development webpack-dev-server",
+		"build": "NODE_ENV=production webpack"
 	},
 	"license": "ISC",
 	"dependencies": {

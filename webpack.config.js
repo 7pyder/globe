@@ -4,17 +4,18 @@ const HtmlWebpackPlugin = require('html-webpack-plugin')
 const CopyWebpackPlugin = require('copy-webpack-plugin')
 const UglifyJsPlugin = require('uglifyjs-webpack-plugin')
 
-module.exports = {
+const mode = process.env.NODE_ENV || 'development'
+
+const config = {
 	entry: {
 		app: './src/js/main.js'
 	},
 	output: {
-		path: path.join(__dirname, 'dist'),
-		publicPath: 'dist',
-		filename: '[name].js'
+		path: path.join(__dirname, 'public'),
+		filename: '[name].[chunkhash].js'
 	},
 	devtool: 'inline-source-map',
-	mode: 'development',
+	mode: mode,
 	module: {
 		rules: [
 			{
@@ -25,18 +26,29 @@ module.exports = {
 		]
 	},
 	plugins: [
-		// new HtmlWebpackPlugin({
-		// 	template: 'app.html',
-		// 	filename: 'index.html',
-		// 	minify: true
-		// }),
+		new HtmlWebpackPlugin({
+			template: 'src/index.html'
+		})
+	]
+}
+
+if (mode === 'production') {
+	config.plugins.push(
+		new CopyWebpackPlugin([
+			{from: 'assets', to: 'assets'}
+		]),
 		new UglifyJsPlugin()
-	],
-	optimization: {
-		splitChunks: {
-			cacheGroups: {
-				commons: { test: /[\\/]node_modules[\\/]/, name: "vendor", chunks: "all" }
+	)
+
+	Object.assign(config, {
+		optimization: {
+			splitChunks: {
+				cacheGroups: {
+					commons: { test: /[\\/]node_modules[\\/]/, name: "vendor", chunks: "all" }
+				}
 			}
 		}
-	}
+	})
 }
+
+module.exports = config
